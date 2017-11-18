@@ -1,12 +1,10 @@
 package main.java;
 
 import java.math.BigInteger;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 public class EventCounterImpl implements EventCounter {
     private volatile static EventCounterImpl instance;
@@ -52,40 +50,36 @@ public class EventCounterImpl implements EventCounter {
         return calendar.get().getTime();
     }
 
-    @Override
-    public BigInteger getEventCountForLastMinute() {
+    private BigInteger getEventCountForPeriodWithFilter(Predicate<Map.Entry<Date, AtomicInteger>> predicate) {
         return events.entrySet().parallelStream().
-                filter(entry -> TimeUnit.MILLISECONDS.toSeconds(
-                        getTrimmedDateToSeconds().getTime() - entry.getKey().getTime()) <= 60).
+                filter(predicate).
                 mapToInt(entry -> entry.getValue().intValue()).
                 mapToObj(BigInteger::valueOf).
                 reduce(BigInteger.ZERO, BigInteger::add);
+    }
+
+    @Override
+    public BigInteger getEventCountForLastMinute() {
+        return getEventCountForPeriodWithFilter(entry -> TimeUnit.MILLISECONDS.toSeconds(
+                getTrimmedDateToSeconds().getTime() - entry.getKey().getTime()) <= 60);
     }
 
     @Override
     public BigInteger getEventCountForLastHour() {
-        return events.entrySet().parallelStream().
-                filter(entry -> {
-                    long diff = getTrimmedDateToSeconds().getTime() - entry.getKey().getTime();
-                    return TimeUnit.MILLISECONDS.toMinutes(diff) < 60 ||
-                            (TimeUnit.MILLISECONDS.toMinutes(diff) == 60 && TimeUnit.MILLISECONDS.toSeconds(diff) == 0);
-                }).
-                mapToInt(entry -> entry.getValue().intValue()).
-                mapToObj(BigInteger::valueOf).
-                reduce(BigInteger.ZERO, BigInteger::add);
+        return getEventCountForPeriodWithFilter(entry -> {
+            long diff = getTrimmedDateToSeconds().getTime() - entry.getKey().getTime();
+            return TimeUnit.MILLISECONDS.toMinutes(diff) < 60 ||
+                    (TimeUnit.MILLISECONDS.toMinutes(diff) == 60 && TimeUnit.MILLISECONDS.toSeconds(diff) == 0);
+        });
     }
 
     @Override
     public BigInteger getEventCountForLastDay() {
-        return events.entrySet().parallelStream().
-                filter(entry -> {
-                    long diff = getTrimmedDateToSeconds().getTime() - entry.getKey().getTime();
-                    return TimeUnit.MILLISECONDS.toHours(diff) < 24 ||
-                            (TimeUnit.MILLISECONDS.toHours(diff) == 24 && TimeUnit.MILLISECONDS.toMinutes(diff) == 0 &&
-                                    TimeUnit.MILLISECONDS.toSeconds(diff) == 0);
-                }).
-                mapToInt(entry -> entry.getValue().intValue()).
-                mapToObj(BigInteger::valueOf).
-                reduce(BigInteger.ZERO, BigInteger::add);
+        return getEventCountForPeriodWithFilter(entry -> {
+            long diff = getTrimmedDateToSeconds().getTime() - entry.getKey().getTime();
+            return TimeUnit.MILLISECONDS.toHours(diff) < 24 ||
+                    (TimeUnit.MILLISECONDS.toHours(diff) == 24 && TimeUnit.MILLISECONDS.toMinutes(diff) == 0 &&
+                            TimeUnit.MILLISECONDS.toSeconds(diff) == 0);
+        });
     }
 }
